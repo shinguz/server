@@ -1,0 +1,20 @@
+call mtr.add_suppression("Page checksum stored in redo log record \\d+ does not match counted checksum \\d+ for page");
+SET GLOBAL debug_dbug="+d,ib_log_checkpoint_avoid";
+SET GLOBAL innodb_page_cleaner_disabled_debug=ON;
+SET GLOBAL innodb_redo_log_checksum=ON;
+SET GLOBAL innodb_flush_log_at_trx_commit=1;
+CREATE TABLE t1(i INT) ENGINE INNODB;
+INSERT INTO t1 VALUES (1);
+# Kill the server
+# restart
+NOT FOUND /Page checksum stored in redo log record/ in mysqld.1.err
+SET GLOBAL debug_dbug="+d,ib_log_checkpoint_avoid";
+SET GLOBAL innodb_page_cleaner_disabled_debug=ON;
+SET GLOBAL innodb_redo_log_checksum=ON;
+SET GLOBAL innodb_flush_log_at_trx_commit=1;
+SET GLOBAL debug_dbug="+d,ib_log_corrupt_option_crc";
+INSERT INTO t1 VALUES (2);
+# Kill the server
+# restart
+FOUND 5 /Page checksum stored in redo log record/ in mysqld.1.err
+DROP TABLE t1;

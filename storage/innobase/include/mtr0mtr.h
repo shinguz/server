@@ -322,6 +322,45 @@ public:
   /** @return true if pages has been trimed */
   bool is_trim_pages() { return m_trim_pages; }
 
+  /** Checks if page was freed within minitransaction.
+  @param id    id of the page to check
+  @return true if page was freed, false otherwise */
+  bool page_is_freed(page_id_t id) const
+  {
+    if (!m_freed_pages)
+      return false;
+
+    ut_ad(!m_freed_pages->empty());
+    ut_ad(m_freed_space);
+    ut_ad(memo_contains(*m_freed_space));
+    ut_ad(is_named_space(m_freed_space));
+
+    if (id.space() != m_freed_space->id)
+      return false;
+
+    return m_freed_pages->contains(id.page_no());
+  }
+
+  /** Counts page CRC for OPTION CHECSUM redo log record.
+  @param page    the pointer to the page
+  @return CRC of the page */
+  static uint32_t page_crc(const byte* page)
+  {
+    /* Since the field FIL_PAGE_FILE_FLUSH_LSN_OR_KEY_VERSION, and in
+       versions <= 4.1.x FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID, are written
+       outside the buffer pool to the first pages of data files, we have to
+       skip them in the page checksum calculation. We must also skip the
+       field FIL_PAGE_SPACE_OR_CHKSUM where the checksum is stored, and also
+       the last 8 bytes of page because there we store the old formula
+       checksum. */
+    return static_cast<uint32_t>(
+      ut_fold_binary(page + FIL_PAGE_OFFSET, FIL_PAGE_LSN - FIL_PAGE_OFFSET)
+      + ut_fold_binary(page + FIL_PAGE_TYPE,
+                       FIL_PAGE_FILE_FLUSH_LSN_OR_KEY_VERSION - FIL_PAGE_PREV)
+      + ut_fold_binary(page + FIL_PAGE_DATA, srv_page_size - FIL_PAGE_DATA
+                                               - FIL_PAGE_END_LSN_OLD_CHKSUM));
+  }
+
 #ifdef UNIV_DEBUG
   /** Check if we are holding an rw-latch in this mini-transaction
   @param lock   latch to search for
@@ -332,7 +371,7 @@ public:
   /** Check if we are holding exclusive tablespace latch
   @param space  tablespace to search for
   @return whether space.latch is being held */
-  bool memo_contains(const fil_space_t& space)
+  bool memo_contains(const fil_space_t& space) const
     MY_ATTRIBUTE((warn_unused_result));
 
 
@@ -545,7 +584,6 @@ public:
   @param data_size  data payload size, in bytes */
   inline void page_delete(const buf_block_t &block, ulint prev_rec,
                           size_t hdr_size, size_t data_size);
-
   /** Write log for initializing an undo log page.
   @param block    undo page */
   inline void undo_create(const buf_block_t &block);
@@ -558,6 +596,11 @@ public:
   /** Trim the end of a tablespace.
   @param id       first page identifier that will not be in the file */
   inline void trim_pages(const page_id_t id);
+
+  /** Write checksum record for the certain page.
+  @param id    id of the page for which crc is counted
+  @param crc   crc of the page */
+  inline void page_checksum(const page_id_t id, uint32_t crc);
 
   /** Write a log record about a file operation.
   @param type           file operation
@@ -633,6 +676,7 @@ public:
   { ut_ad(!m_commit || m_start); return m_start && !m_commit; }
   /** @return whether the mini-transaction has been committed */
   bool has_committed() const { ut_ad(!m_commit || m_start); return m_commit; }
+
 private:
   /** whether start() has been called */
   bool m_start= false;

@@ -19897,6 +19897,11 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
 			 "Enable scrubbing of data",
 			 NULL, NULL, FALSE);
 
+static MYSQL_SYSVAR_BOOL(
+  redo_log_checksum, srv_redo_log_checksum, 0,
+  "Write redo log record with page crc for each modified page on mtr commit",
+  NULL, NULL, FALSE);
+
 static MYSQL_SYSVAR_BOOL(background_scrub_data_uncompressed,
   deprecated::innodb_background_scrub_data_uncompressed,
   PLUGIN_VAR_OPCMDARG, innodb_deprecated_ignored, NULL,
@@ -20122,6 +20127,7 @@ static struct st_mysql_sys_var* innobase_system_variables[]= {
   MYSQL_SYSVAR(buf_dump_status_frequency),
   MYSQL_SYSVAR(background_thread),
   MYSQL_SYSVAR(encrypt_temporary_tables),
+  MYSQL_SYSVAR(redo_log_checksum),
 
   NULL
 };
