@@ -341,25 +341,13 @@ public:
     return m_freed_pages->contains(id.page_no());
   }
 
-  /** Counts page CRC for OPTION CHECSUM redo log record.
-  @param page    the pointer to the page
+  /** Counts page CRC for OPTION CHECKSUM redo log record.
+  @param page       the pointer to a page
+  @param page_zip   the pointer to compressed page
+  @param page_size  page size (compressed or uncompressed)
   @return CRC of the page */
-  static uint32_t page_crc(const byte* page)
-  {
-    /* Since the field FIL_PAGE_FILE_FLUSH_LSN_OR_KEY_VERSION, and in
-       versions <= 4.1.x FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID, are written
-       outside the buffer pool to the first pages of data files, we have to
-       skip them in the page checksum calculation. We must also skip the
-       field FIL_PAGE_SPACE_OR_CHKSUM where the checksum is stored, and also
-       the last 8 bytes of page because there we store the old formula
-       checksum. */
-    return static_cast<uint32_t>(
-      ut_fold_binary(page + FIL_PAGE_OFFSET, FIL_PAGE_LSN - FIL_PAGE_OFFSET)
-      + ut_fold_binary(page + FIL_PAGE_TYPE,
-                       FIL_PAGE_FILE_FLUSH_LSN_OR_KEY_VERSION - FIL_PAGE_PREV)
-      + ut_fold_binary(page + FIL_PAGE_DATA, srv_page_size - FIL_PAGE_DATA
-                                               - FIL_PAGE_END_LSN_OLD_CHKSUM));
-  }
+  static uint32_t page_crc(const byte* page, const byte* page_zip,
+                           ulint page_size);
 
 #ifdef UNIV_DEBUG
   /** Check if we are holding an rw-latch in this mini-transaction
