@@ -5555,14 +5555,17 @@ ha_innobase::open(const char* name, int, uint open_flags)
 	}
 #endif /* WITH_INNODB_LEGACY_FOREIGN_STORAGE */
 
-	mutex_enter(&dict_sys.mutex);
-	err = dict_load_foreigns(m_user_thd, ib_table, table->s, NULL, false,
-				 DICT_ERR_IGNORE_FK_NOKEY);
-	mutex_exit(&dict_sys.mutex);
-	if (err != DB_SUCCESS) {
-		dict_table_close(ib_table, FALSE, FALSE);
-		DBUG_RETURN(convert_error_code_to_mysql(
-					err, ib_table->flags, NULL));
+	if (table->s->foreign_keys.elements
+	    || table->s->referenced_keys.elements) {
+		mutex_enter(&dict_sys.mutex);
+		err = dict_load_foreigns(ha_thd(), ib_table, table->s, NULL,
+					 false, DICT_ERR_IGNORE_FK_NOKEY);
+		mutex_exit(&dict_sys.mutex);
+		if (err != DB_SUCCESS) {
+			dict_table_close(ib_table, FALSE, FALSE);
+			DBUG_RETURN(convert_error_code_to_mysql(
+						err, ib_table->flags, NULL));
+		}
 	}
 
 	m_prebuilt = row_create_prebuilt(ib_table, table->s->reclength);
@@ -21462,6 +21465,13 @@ fk_upgrade_push_fk(
 	return 1;
 }
 
+/** Load and delete legacy foreign data from SYS_FOREIGN into TABLE_SHARE;
+ *  Update FRMs of share and referenced shares.
+@param[in]	table		dict_table_t data
+@param[in]	trx		trx_t used to eval sql code
+@param[in]	thd		THD used to handle FRM update
+@param[out]	share		foreign_keys, referenced_keys receive the data
+@return				DB_LEGACY_FK or error code */
 static dberr_t
 fk_upgrade_legacy_storage(dict_table_t* table, trx_t* trx, THD* thd,
 			  TABLE_SHARE* share)
@@ -21617,6 +21627,12 @@ fk_check_upgrade(
 	return 0;
 }
 
+/** Test whether legacy foreign data exists in SYS_FOREIGN
+@param[in]	table_name	Name in form of DB/TABLE_NAME
+@param[in]	trx		trx_t used to eval sql code
+@retval		DB_SUCCESS	No legacy data found
+@retval		DB_LEGACY_FK	Legacy data found
+@retval		any other	Error code */
 static dberr_t
 fk_check_legacy_storage(const char* table_name, trx_t* trx)
 {
@@ -21652,13 +21668,17 @@ fk_check_legacy_storage(const char* table_name, trx_t* trx)
 }
 #endif /* WITH_INNODB_LEGACY_FOREIGN_STORAGE */
 
+/** Load dict_foreign_t cache from TABLE_SHARE
+@param[in]	thd		THD is used to acquire share
+@param[in]	share		If NULL share is acquired by table name
+@param[in,out]	table		foreign_list, referenced_list receive the data
+@param[in]	col_names	Column names or NULL to use table->col_names
+@param[in]	check_charsets	Whether to check charset compatibility
+@param[in]	ignore_err	Error to be ignored */
 dberr_t
 dict_load_foreigns(THD* thd, dict_table_t* table, TABLE_SHARE* share,
-		   const char** col_names,	 /*!< in: column names, or NULL
-						 to use table->col_names */
-		   bool check_charsets,		 /*!< in: whether to check
-						 charset compatibility */
-		   dict_err_ignore_t ignore_err) /*!< in: error to be ignored */
+		   const char** col_names, bool check_charsets,
+		   dict_err_ignore_t ignore_err)
 {
 	Share_acquire	sa;
 	TABLE_LIST	tl;
@@ -21669,6 +21689,7 @@ dict_load_foreigns(THD* thd, dict_table_t* table, TABLE_SHARE* share,
 	dberr_t		err;
 	const char*	column_names[MAX_NUM_FK_COLUMNS];
 	const char*	ref_column_names[MAX_NUM_FK_COLUMNS];
+	ut_ad(thd);
 	ut_ad(table);
 	if (table->is_system_db)
 		return DB_SUCCESS;
@@ -21677,9 +21698,6 @@ dict_load_foreigns(THD* thd, dict_table_t* table, TABLE_SHARE* share,
 		LEX_CSTRING table_name;
 		char	    db_buf[NAME_LEN + 1];
 		char	    tbl_buf[NAME_LEN + 1];
-
-		if (!current_thd)
-			return DB_CANNOT_ADD_CONSTRAINT;
 
 		if (!table->parse_name<true>(db_buf, tbl_buf, &db.length,
 					     &table_name.length)) {
@@ -21690,7 +21708,7 @@ dict_load_foreigns(THD* thd, dict_table_t* table, TABLE_SHARE* share,
 		table_name.str = tbl_buf;
 
 		tl.init_one_table(&db, &table_name, &table_name, TL_IGNORE);
-		sa.acquire(current_thd, tl);
+		sa.acquire(thd, tl);
 		if (!sa.share) {
 			return DB_CANNOT_ADD_CONSTRAINT;
 		}
