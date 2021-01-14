@@ -33,7 +33,7 @@ INSERT INTO t_enc_page_comp VALUES (2);
 INSERT INTO t_enc_rf_comp VALUES (2);
 # Kill the server
 # restart: --skip-innodb-encrypt-log
-FOUND 30 /Page checksum stored in redo log record/ in mysqld.1.err
+FOUND 27 /Page checksum stored in redo log record/ in mysqld.1.err
 DROP TABLE t;
 DROP TABLE t_page_comp;
 DROP TABLE t_rf_comp;
@@ -60,7 +60,7 @@ CREATE TABLE t_enc_rf_comp(i INT) ENGINE INNODB row_format=compressed encrypted=
 INSERT INTO t_enc_rf_comp VALUES (1);
 # Kill the server
 # restart: --innodb-encrypt-log=ON
-FOUND 30 /Page checksum stored in redo log record/ in mysqld.1.err
+FOUND 27 /Page checksum stored in redo log record/ in mysqld.1.err
 SET GLOBAL debug_dbug="+d,ib_log_checkpoint_avoid";
 SET GLOBAL innodb_page_cleaner_disabled_debug=ON;
 SET GLOBAL innodb_redo_log_checksum=ON;
@@ -74,7 +74,7 @@ INSERT INTO t_enc_page_comp VALUES (2);
 INSERT INTO t_enc_rf_comp VALUES (2);
 # Kill the server
 # restart: --innodb-encrypt-log=ON
-FOUND 60 /Page checksum stored in redo log record/ in mysqld.1.err
+FOUND 54 /Page checksum stored in redo log record/ in mysqld.1.err
 DROP TABLE t;
 DROP TABLE t_page_comp;
 DROP TABLE t_rf_comp;

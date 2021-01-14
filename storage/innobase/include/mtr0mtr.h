@@ -343,11 +343,8 @@ public:
 
   /** Counts page CRC for OPTION CHECKSUM redo log record.
   @param page       the pointer to a page
-  @param page_zip   the pointer to compressed page
-  @param page_size  page size (compressed or uncompressed)
   @return CRC of the page */
-  static uint32_t page_crc(const byte* page, const byte* page_zip,
-                           ulint page_size);
+  static uint32_t page_crc(byte *page);
 
 #ifdef UNIV_DEBUG
   /** Check if we are holding an rw-latch in this mini-transaction

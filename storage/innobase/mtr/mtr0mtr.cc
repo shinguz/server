@@ -28,6 +28,7 @@ Created 11/26/1995 Heikki Tuuri
 
 #include "buf0buf.h"
 #include "buf0flu.h"
+#include "buf0checksum.h"
 #include "fsp0sysspace.h"
 #include "page0types.h"
 #include "mtr0log.h"
@@ -203,39 +204,14 @@ private:
 
 /** Counts page CRC for OPTION CHECKSUM redo log record.
 @param page       the pointer to a page
-@param page_zip   the pointer to compressed page
-@param page_size  page size (compressed or uncompressed)
 @return CRC of the page */
-uint32_t mtr_t::page_crc(const byte* page, const byte* page_zip,
-                         ulint page_size)
+uint32_t mtr_t::page_crc(byte *page)
 {
-  const byte* frame;
-  if (page_zip) {
-    switch (fil_page_get_type(page)) {
-    case FIL_PAGE_TYPE_ALLOCATED:
-    case FIL_PAGE_INODE:
-    case FIL_PAGE_IBUF_BITMAP:
-    case FIL_PAGE_TYPE_FSP_HDR:
-    case FIL_PAGE_TYPE_XDES:
-      /* These are essentially uncompressed pages. */
-      frame = page;
-      break;
-    case FIL_PAGE_TYPE_ZBLOB:
-    case FIL_PAGE_TYPE_ZBLOB2:
-    case FIL_PAGE_INDEX:
-    case FIL_PAGE_RTREE:
-      frame = page_zip;
-    }
-  } else
-    frame = page;
-
-  uint32_t crc
-    = my_crc32c(0, frame + FIL_PAGE_OFFSET, FIL_PAGE_LSN - FIL_PAGE_OFFSET);
-  crc = my_crc32c(crc, frame + FIL_PAGE_TYPE, 2);
-  crc = my_crc32c(crc, frame + FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID,
-                  page_size - FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID
-                    - FIL_PAGE_END_LSN_OLD_CHKSUM);
-
+  ut_ad(page);
+  lsn_t lsn = mach_read_from_8(page + FIL_PAGE_LSN);
+  mach_write_to_8(page + FIL_PAGE_LSN, 0);
+  uint32_t crc = buf_calc_page_crc32(page);
+  mach_write_to_8(page + FIL_PAGE_LSN, lsn);
   return crc;
 }
 
@@ -364,8 +340,8 @@ struct WriteOptionCRC {
       if (!m_visited_pages.count(page_id_raw)) {
         static_assert(FIL_PAGE_SPACE_OR_CHKSUM == FIL_PAGE_OFFSET - 4,
                       "compatibility");
-        if (!m_mtr.page_is_freed(block->page.id())) {
-          uint32_t crc = mtr_t::page_crc(block->frame, block->page.zip.data, block->page.physical_size());
+        if (!m_mtr.page_is_freed(block->page.id()) && !block->page.zip.data) {
+          uint32_t crc = mtr_t::page_crc(block->frame);
           DBUG_EXECUTE_IF("ib_log_corrupt_option_crc", crc += 10;);
           m_mtr.page_checksum(block->page.id(), crc);
         }
