@@ -205,14 +205,16 @@ private:
 /** Counts page CRC for OPTION CHECKSUM redo log record.
 @param page       the pointer to a page
 @return CRC of the page */
-uint32_t mtr_t::page_crc(byte *page)
+uint32_t mtr_t::page_crc(const buf_block_t &block)
 {
+  byte *page = block.frame;
   ut_ad(page);
   lsn_t lsn = mach_read_from_8(page + FIL_PAGE_LSN);
   mach_write_to_8(page + FIL_PAGE_LSN, 0);
-  uint32_t crc = buf_calc_page_crc32(page);
+  uint32_t checksum;
+  buf_flush_init_for_writing(&block, block.frame, nullptr, false, &checksum);
   mach_write_to_8(page + FIL_PAGE_LSN, lsn);
-  return crc;
+  return checksum;
 }
 
 /** Release latches and decrement the buffer fix count.
@@ -341,7 +343,7 @@ struct WriteOptionCRC {
         static_assert(FIL_PAGE_SPACE_OR_CHKSUM == FIL_PAGE_OFFSET - 4,
                       "compatibility");
         if (!m_mtr.page_is_freed(block->page.id()) && !block->page.zip.data) {
-          uint32_t crc = mtr_t::page_crc(block->frame);
+          uint32_t crc = mtr_t::page_crc(*block);
           DBUG_EXECUTE_IF("ib_log_corrupt_option_crc", crc += 10;);
           m_mtr.page_checksum(block->page.id(), crc);
         }

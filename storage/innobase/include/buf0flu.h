@@ -83,13 +83,17 @@ void buf_flush_assign_full_crc32_checksum(byte* page);
 @param[in]	block			buffer block; NULL if bypassing the buffer pool
 @param[in,out]	page			page frame
 @param[in,out]	page_zip_		compressed page, or NULL if uncompressed
+@param[in,out]	out_checksum	indicates if this function can change page
+					content or not, it's also pointer to where counted checksum
+					will be stored.
 @param[in]	use_full_checksum	whether tablespace uses full checksum */
 void
 buf_flush_init_for_writing(
 	const buf_block_t*	block,
 	byte*			page,
 	void*			page_zip_,
-	bool			use_full_checksum);
+	bool			use_full_checksum,
+	uint32_t	*out_checksum = nullptr);
 
 /** Write out dirty blocks from buf_pool.flush_list.
 @param max_n    wished maximum mumber of blocks flushed

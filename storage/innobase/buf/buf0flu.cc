@@ -440,13 +440,17 @@ void buf_flush_assign_full_crc32_checksum(byte* page)
 @param[in,out]	page			page frame
 @param[in,out]	page_zip_		compressed page, or NULL if
 					uncompressed
+@param[in,out]	out_checksum	indicates if this function can change page
+					content or not, it's also pointer to where counted checksum
+					will be stored.
 @param[in]	use_full_checksum	whether tablespace uses full checksum */
 void
 buf_flush_init_for_writing(
 	const buf_block_t*	block,
 	byte*			page,
 	void*			page_zip_,
-	bool			use_full_checksum)
+	bool			use_full_checksum,
+	uint32_t	*out_checksum)
 {
 	if (block != NULL && block->frame != page) {
 		/* If page is encrypted in full crc32 format then
@@ -461,6 +465,7 @@ buf_flush_init_for_writing(
 	ut_ad(page);
 
 	if (page_zip_) {
+		ut_ad(!out_checksum);
 		page_zip_des_t*	page_zip;
 		ulint		size;
 
@@ -498,6 +503,7 @@ buf_flush_init_for_writing(
 	}
 
 	if (use_full_checksum) {
+		ut_ad(!out_checksum);
 		static_assert(FIL_PAGE_FCRC32_END_LSN % 4 == 0, "aligned");
 		static_assert(FIL_PAGE_LSN % 4 == 0, "aligned");
 		memcpy_aligned<4>(page + srv_page_size
@@ -511,7 +517,7 @@ buf_flush_init_for_writing(
 	memcpy_aligned<8>(page + srv_page_size - FIL_PAGE_END_LSN_OLD_CHKSUM,
 			  FIL_PAGE_LSN + page, 8);
 
-	if (block && srv_page_size == 16384) {
+	if (block && srv_page_size == 16384 && !out_checksum) {
 		/* The page type could be garbage in old files
 		created before MySQL 5.5. Such files always
 		had a page size of 16 kilobytes. */
@@ -577,8 +583,9 @@ buf_flush_init_for_writing(
 	case SRV_CHECKSUM_ALGORITHM_INNODB:
 	case SRV_CHECKSUM_ALGORITHM_STRICT_INNODB:
 		checksum = buf_calc_page_new_checksum(page);
-		mach_write_to_4(page + FIL_PAGE_SPACE_OR_CHKSUM,
-				checksum);
+		if (!out_checksum)
+		  mach_write_to_4(page + FIL_PAGE_SPACE_OR_CHKSUM,
+				  checksum);
 		/* With the InnoDB checksum, we overwrite the first 4 bytes of
 		the end lsn field to store the old formula checksum. Since it
 		depends also on the field FIL_PAGE_SPACE_OR_CHKSUM, it has to
@@ -591,20 +598,25 @@ buf_flush_init_for_writing(
 	case SRV_CHECKSUM_ALGORITHM_STRICT_CRC32:
 		/* In other cases we write the same checksum to both fields. */
 		checksum = buf_calc_page_crc32(page);
-		mach_write_to_4(page + FIL_PAGE_SPACE_OR_CHKSUM,
-				checksum);
+		if (!out_checksum)
+		  mach_write_to_4(page + FIL_PAGE_SPACE_OR_CHKSUM,
+				  checksum);
 		break;
 	case SRV_CHECKSUM_ALGORITHM_NONE:
 	case SRV_CHECKSUM_ALGORITHM_STRICT_NONE:
-		mach_write_to_4(page + FIL_PAGE_SPACE_OR_CHKSUM,
-				checksum);
+		if (!out_checksum)
+		  mach_write_to_4(page + FIL_PAGE_SPACE_OR_CHKSUM,
+				  checksum);
 		break;
 		/* no default so the compiler will emit a warning if
 		new enum is added and not handled here */
 	}
 
-	mach_write_to_4(page + srv_page_size - FIL_PAGE_END_LSN_OLD_CHKSUM,
-			checksum);
+	if (out_checksum)
+			 *out_checksum = checksum;
+	else
+	  mach_write_to_4(page + srv_page_size - FIL_PAGE_END_LSN_OLD_CHKSUM,
+			  checksum);
 }
 
 /** Reserve a buffer for compression.

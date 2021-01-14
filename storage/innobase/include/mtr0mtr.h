@@ -344,7 +344,7 @@ public:
   /** Counts page CRC for OPTION CHECKSUM redo log record.
   @param page       the pointer to a page
   @return CRC of the page */
-  static uint32_t page_crc(byte *page);
+  static uint32_t page_crc(const buf_block_t &block);
 
 #ifdef UNIV_DEBUG
   /** Check if we are holding an rw-latch in this mini-transaction

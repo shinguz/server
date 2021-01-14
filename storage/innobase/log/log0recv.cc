@@ -290,7 +290,7 @@ public:
           uint32_t crc = mach_read_from_4(l);
           l += 4;
           ut_ad(!block.page.zip.ssize);
-          uint32_t calc_crc = mtr_t::page_crc(block.frame);
+          uint32_t calc_crc = mtr_t::page_crc(block);
           if (calc_crc != crc) {
             ib::warn() << "Page checksum stored in redo log record " << crc
               << " does not match counted checksum " << calc_crc
