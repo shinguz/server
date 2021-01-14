@@ -19900,7 +19900,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
 static MYSQL_SYSVAR_BOOL(
   redo_log_checksum, srv_redo_log_checksum, 0,
   "Write redo log record with page crc for each modified page on mtr commit",
-  NULL, NULL, FALSE);
+  NULL, NULL, TRUE);
 
 static MYSQL_SYSVAR_BOOL(background_scrub_data_uncompressed,
   deprecated::innodb_background_scrub_data_uncompressed,
